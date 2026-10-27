@@ -1,0 +1,62 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin · Birthday Site</title>
+<style>
+body{font:14px/1.5 system-ui,sans-serif;background:#fff0f5;color:#3a1226;margin:0}main{max-width:760px;margin:auto;padding:20px}
+h1{color:#d6336c;font-family:Georgia,serif;font-style:italic}label{display:block;font-weight:700;margin:18px 0 4px}small{font-weight:400;color:#8a5a6e}
+input[type=text],input[type=password],textarea{width:100%;padding:10px;border:1px solid #f0b3c8;border-radius:10px;font:inherit;background:#fff;color:inherit}
+textarea{min-height:110px}button{background:#d6336c;color:#fff;border:0;border-radius:99px;padding:10px 22px;font-weight:700;cursor:pointer;margin:6px 6px 0 0}
+button.g{background:#fff;color:#d6336c;border:1px solid #d6336c}.bar{position:sticky;bottom:0;background:#fff0f5;padding:12px 0;border-top:1px solid #f0b3c8;margin-top:24px}
+#msg{font-weight:700;margin-left:6px}.pv{background:#fff;border-radius:10px;padding:10px;margin-top:8px;white-space:pre-line}#login{max-width:340px;margin:12vh auto}
+.ph{display:flex;gap:8px;align-items:center;background:#fff;border-radius:12px;padding:8px;margin-top:8px}.ph img{width:64px;height:80px;object-fit:cover;border-radius:8px}.ph input{flex:1}
+button.s{padding:6px 12px;margin:0}</style></head><body><main>
+<div id="login" hidden><h1>Admin login</h1><input type="password" id="pw" placeholder="Password"><button id="go">Login</button><div id="lerr" style="color:#b0244f;margin-top:8px"></div></div>
+<div id="app" hidden>
+<h1>Edit your birthday website 💌</h1><p>Changes go <b>live instantly</b> after Save. <a href="/" target="_blank">Open site ↗</a></p>
+<label>Envelope heading</label><input type="text" id="intro">
+<label>Main title <small>(🎂 is added automatically)</small></label><input type="text" id="title">
+<label>Small line above title</label><input type="text" id="subtitle">
+<label>Letter <small>(separate paragraphs with a blank line)</small></label><textarea id="letter" style="min-height:260px"></textarea>
+<label>“This is us” buttons <small>(one per line: Button label | Caption)</small></label><textarea id="chips"></textarea>
+<label>My Promises <small>(one per line)</small></label><textarea id="promises"></textarea>
+<label>Hug button messages <small>(one per line, shown in order)</small></label><textarea id="hug"></textarea>
+<label>“Our Cute Moments” generator <small>(one theme per line: emoji emoji :: starts / starts :: endings / endings). Any start + any ending are combined, so the supply never runs out and the emoji always matches the theme.</small></label><textarea id="momentThemes" style="min-height:220px"></textarea>
+<label>“Reasons I love you” generator <small>(same format)</small></label><textarea id="reasonThemes" style="min-height:180px"></textarea>
+<label>Photo album <small>(upload as many photos as you like — they appear on the site right away. Leave a caption empty to get an auto cute/naughty line each time; type one to fix it for that photo. Click Save after editing captions/order.)</small></label>
+<input type="file" id="up" accept="image/*" multiple><div id="phl"></div>
+<label>Photo caption generator <small>(same format: emoji :: starts :: endings)</small></label><textarea id="photoThemes" style="min-height:180px"></textarea>
+<label><input type="checkbox" id="useAI"> Use Claude AI for brand-new lines <small>(needs ANTHROPIC_API_KEY on the server; falls back to the generator above)</small></label>
+<div id="pv"></div>
+<div class="bar"><button id="save">Save &amp; go live</button><button class="g" id="test">Preview generated lines</button><button class="g" id="out">Logout</button><span id="msg"></span></div>
+</div>
+<script>
+const $=s=>document.querySelector(s);let C;
+const j=async(u,m='GET',b)=>{const r=await fetch(u,{method:m,headers:{'content-type':'application/json'},body:b?JSON.stringify(b):undefined});const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(d.error||'Error'),{status:r.status});return d};
+const th=a=>a.map(t=>t.emoji.join(' ')+' :: '+t.starts.join(' / ')+' :: '+t.ends.join(' / ')).join('\n');
+const unth=(s,name)=>s.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const p=l.split('::').map(x=>x.trim());if(p.length!==3||!p[0])throw new Error(name+': each line needs  emoji :: starts :: endings');const f=x=>x.split('/').map(y=>y.trim()).filter(Boolean);return{emoji:p[0].split(/\s+/),starts:f(p[1]),ends:f(p[2])}});
+const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
+async function init(){try{const m=await j('/api/admin/me');if(!m.authed)return showLogin();C=await j('/api/admin/content');fill();$('#login').hidden=true;$('#app').hidden=false}catch{showLogin()}}
+function showLogin(){$('#app').hidden=true;$('#login').hidden=false}
+function fill(){['intro','title','subtitle'].forEach(k=>$('#'+k).value=C[k]||'');
+$('#letter').value=C.letter.join('\n\n');$('#chips').value=C.chips.map(x=>x.label+' | '+x.caption).join('\n');
+$('#promises').value=C.promises.join('\n');$('#hug').value=C.hug.join('\n');$('#momentThemes').value=th(C.momentThemes);$('#reasonThemes').value=th(C.reasonThemes);$('#useAI').checked=!!C.useAI;$('#photoThemes').value=th(C.photoThemes);drawPh()}
+$('#go').onclick=async()=>{try{await j('/api/login','POST',{password:$('#pw').value});$('#pw').value='';$('#lerr').textContent='';init()}catch(e){$('#lerr').textContent=e.message}};
+$('#pw').onkeydown=e=>{if(e.key==='Enter')$('#go').click()};
+$('#out').onclick=async()=>{await j('/api/logout','POST');showLogin()};
+$('#save').onclick=async()=>{const m=$('#msg');try{
+const d={intro:$('#intro').value,title:$('#title').value,subtitle:$('#subtitle').value,
+letter:$('#letter').value.split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean),
+chips:lines($('#chips').value).map(l=>{const[a,...b]=l.split('|');return{label:a.trim(),caption:b.join('|').trim()}}),
+promises:lines($('#promises').value),hug:lines($('#hug').value),
+momentThemes:unth($('#momentThemes').value,'Moments'),reasonThemes:unth($('#reasonThemes').value,'Reasons'),useAI:$('#useAI').checked,photos:C.photos,photoThemes:unth($('#photoThemes').value,'Photo captions')};
+await j('/api/admin/content','PUT',d);C=d;m.style.color='#1f7a4d';m.textContent='Saved ✓ — live now'}catch(e){m.style.color='#b0244f';m.textContent=e.status===401?'Session expired, login again':e.message}};
+$('#test').onclick=async()=>{await $('#save').onclick();const a=await j('/api/moments?n=4'),b=await j('/api/reasons?n=4');
+$('#pv').innerHTML='<div class="pv"><b>Moments</b>\n'+a.items.map(x=>x.emoji+' '+x.text).join('\n')+'</div><div class="pv"><b>Reasons</b>\n'+b.items.map(x=>x.emoji+' '+x.text).join('\n')+'</div>'};
+function drawPh(){const g=$('#phl');g.innerHTML='';C.photos.forEach((p,i)=>{const d=document.createElement('div');d.className='ph';d.innerHTML='<img src="/uploads/'+p.file+'"><input type="text" placeholder="Empty = auto cute line">';
+const inp=d.querySelector('input');inp.value=p.caption||'';inp.oninput=()=>{p.caption=inp.value};
+const mk=(t,f)=>{const b=document.createElement('button');b.className='g s';b.textContent=t;b.onclick=f;d.appendChild(b)};
+mk('↑',()=>{if(i){[C.photos[i-1],C.photos[i]]=[C.photos[i],C.photos[i-1]];drawPh()}});
+mk('↓',()=>{if(i<C.photos.length-1){[C.photos[i+1],C.photos[i]]=[C.photos[i],C.photos[i+1]];drawPh()}});
+mk('✕',async()=>{if(!confirm('Delete this photo?'))return;await j('/api/admin/photos/'+p.id,'DELETE');C.photos.splice(i,1);drawPh()});g.appendChild(d)})}
+const shrink=f=>new Promise((res,rej)=>{const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const s=Math.min(1,1100/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.75))};im.onerror=rej;im.src=u});
+$('#up').onchange=async e=>{const fs=[...e.target.files],m=$('#msg');m.style.color='#3a1226';for(let k=0;k<fs.length;k++){m.textContent='Uploading '+(k+1)+'/'+fs.length+'…';try{const r=await j('/api/admin/photos','POST',{data:await shrink(fs[k])});C.photos.push(r.photo)}catch(er){m.style.color='#b0244f';m.textContent='Upload failed: '+er.message;break}}drawPh();if(fs.length&&m.style.color!=='rgb(176, 36, 79)')m.textContent='Uploaded ✓ (live). Press Save to keep captions/order.';e.target.value=''};
+init();
+</script></main></body></html>
